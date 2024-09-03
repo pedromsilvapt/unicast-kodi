@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<addon id="plugin.video.unicast"
+version="0.1.0"
+name="Unicast Media Source"
+provider-name="Pedro M. Silva">
+<requires>
+  <import addon="xbmc.python" version="3.0.0"/>
+  <import addon="script.module.routing" version="0.2.0"/>
+  <import addon="script.module.requests" version="2.12.4"/>
+</requires>
+<extension point="xbmc.python.pluginsource" library="source.py">
+  <provides>video</provides>
+</extension>
+<extension point="xbmc.service" library="service.py"></extension>
+<extension point="xbmc.python.script" library="script.py">
+  <provides>executable</provides>
+</extension>
+<extension point="xbmc.addon.metadata">
+  <summary lang="en">Unicast Media Source</summary>
+  <description lang="en_GB">Sources media from a Unicast media server.</description>
+  <assets>
+    <icon>icon.png</icon>
+    <fanart>fanart.jpg</fanart>
+    <screenshot>resources\screenshot00000.jpg</screenshot>
+    <screenshot>resources\screenshot00001.jpg</screenshot>
+    <screenshot>resources\screenshot00002.jpg</screenshot>
+    <screenshot>resources\screenshot00003.jpg</screenshot>
+    <screenshot>resources\screenshot00004.jpg</screenshot>
+    <screenshot>resources\screenshot00005.jpg</screenshot>
+  </assets>
+  <news>Updated with latest artwork metadata</news>
+</extension>
+</addon>

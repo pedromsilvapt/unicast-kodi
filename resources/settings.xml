@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<settings>
+    <category label="Unicast Server">
+        <setting label="Address" type="ipaddress" id="address" default="127.0.0.1"/>
+        <setting label="Port" type="number" id="port" default="3030"/>
+        <setting label="Receiver (Optional)" type="text" id="receiver" default="Kodi" />
+        <setting type="sep"/>
+        <setting id="debug" type="bool" label="Debug" default="false"/>
+    </category>
+    <category label="Collections">
+        <setting label="Excluded" type="text" id="excludedCategories" />
+        <setting label="Included" type="text" id="includedCategories" />
+    </category>
+</settings>
