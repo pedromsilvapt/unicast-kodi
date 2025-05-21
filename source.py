@@ -33,6 +33,13 @@ __profile__ = xbmcvfs.translatePath(my_addon.getAddonInfo('profile'))
 
 poster_size = 500
 
+def try_get(obj, *properties):
+    for prop in properties:
+        if obj is not None:
+            obj = obj.get(prop)
+
+    return obj
+
 # link https://stackoverflow.com/questions/1630320/what-is-the-pythonic-way-to-detect-the-last-element-in-a-for-loop
 def lookahead(iterable):
     """Pass through all values from the given iterable, augmented by the
@@ -352,8 +359,8 @@ def create_tvepisode_item(episode, season = None, show = None):
     })
 
     item.setProperties({
-        'VideoCodec': episode['quality']['codec'],
-        'VideoResolution': episode['quality']['resolution'],
+        'VideoCodec': try_get(episode, 'metadata', 'video', 'codec'),
+        'VideoResolution': try_get(episode, 'metadata', 'video', 'resolution'),
         'IsPlayable': True,
     })
 
@@ -411,8 +418,8 @@ def create_movie_item(movie):
     })
 
     item.setProperties({
-        'VideoCodec': movie['quality']['codec'],
-        'VideoResolution': movie['quality']['resolution'],
+        'VideoCodec': try_get(movie, 'metadata', 'video', 'codec'),
+        'VideoResolution': try_get(movie, 'metadata', 'video', 'resolution'),
         'IsPlayable': True
     })
     return item
@@ -670,8 +677,8 @@ def create_custom_item(custom):
     })
 
     item.setProperties({
-        'VideoCodec': custom['quality']['codec'],
-        'VideoResolution': custom['quality']['resolution'],
+        'VideoCodec': try_get(custom, 'metadata', 'video', 'codec'),
+        'VideoResolution': try_get(custom, 'metadata', 'video', 'resolution'),
         'IsPlayable': True
     })
     return item
