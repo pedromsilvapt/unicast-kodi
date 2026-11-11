@@ -581,7 +581,7 @@ def list_playlists(page):
 
     receiver = my_addon.getSetting( 'receiver' ) or None
 
-    params = {'items': 'false', 'take': playlist_page_size, 'skip': page * playlist_page_size, 'filterSort[field]': 'createdAt', 'filterSort[direction]': 'desc'}
+    params = {'items': 'true', 'take': playlist_page_size, 'skip': page * playlist_page_size, 'filterSort[field]': 'createdAt', 'filterSort[direction]': 'desc'}
     playlists = api_request('player/%s/playlists' % urllib.parse.quote(receiver), params = params)
 
     setPluginCategory(plugin.handle, 'Playlists (Page %s)' % (page + 1))
@@ -593,7 +593,7 @@ def list_playlists(page):
         time_format = '%H:%M'
 
         playlist_title = playlist_date.strftime(date_format)
-        playlist_subtitle = '%s (%d items)' % (playlist_date.strftime(time_format), len(playlist['references']))
+        playlist_subtitle = '%s (%d items)' % (playlist_date.strftime(time_format), len(playlist['items']))
 
         addDirectoryItem(plugin.handle, plugin.url_for(list_playlist_items, playlist['id']), ListItem(playlist_title, playlist_subtitle), True)
 
