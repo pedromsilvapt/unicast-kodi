@@ -40,6 +40,9 @@ def try_get(obj, *properties):
 
     return obj
 
+def without_none(d):
+    return {k: v for k, v in d.items() if v is not None}
+
 # link https://stackoverflow.com/questions/1630320/what-is-the-pythonic-way-to-detect-the-last-element-in-a-for-loop
 def lookahead(iterable):
     """Pass through all values from the given iterable, augmented by the
@@ -358,11 +361,11 @@ def create_tvepisode_item(episode, season = None, show = None):
         'mediatype': 'episode'
     })
 
-    item.setProperties({
+    item.setProperties(without_none({
         'VideoCodec': try_get(episode, 'metadata', 'video', 'codec'),
         'VideoResolution': try_get(episode, 'metadata', 'video', 'resolution'),
         'IsPlayable': True,
-    })
+    }))
 
     return item
 
@@ -417,11 +420,11 @@ def create_movie_item(movie):
         'mediatype': 'movie'
     })
 
-    item.setProperties({
+    item.setProperties(without_none({
         'VideoCodec': try_get(movie, 'metadata', 'video', 'codec'),
         'VideoResolution': try_get(movie, 'metadata', 'video', 'resolution'),
         'IsPlayable': True
-    })
+    }))
     return item
 
 def render_movies(movies):
@@ -676,11 +679,11 @@ def create_custom_item(custom):
         'mediatype': 'video'
     })
 
-    item.setProperties({
+    item.setProperties(without_none({
         'VideoCodec': try_get(custom, 'metadata', 'video', 'codec'),
         'VideoResolution': try_get(custom, 'metadata', 'video', 'resolution'),
         'IsPlayable': True
-    })
+    }))
     return item
 
 
@@ -789,6 +792,6 @@ if __name__ == '__main__':
     xbmc.log( "PAGE: %s%s in %.3f secs (user code in %.3f secs)" % ( sys.argv[ 0 ], sys.argv[ 2 ], end - start, end - start_user ), level=xbmc.LOGDEBUG )
 
     if 'select' in plugin.args:
-        builtin = 'RunScript(%s,%s,%s)' % ('plugin.video.unicast', sys.argv[0] + sys.argv[ 2 ], base64.encodestring(plugin.args['select'][0].encode('utf-8')))
+        builtin = 'RunScript(%s,%s,%s,%s)' % ('plugin.video.unicast', 'autoselect', sys.argv[0] + sys.argv[ 2 ], base64.b64encode(plugin.args['select'][0].encode('utf-8')).decode('ascii'))
 
-        xbmc.executebuiltin(builtin.encode('utf-8'))
+        xbmc.executebuiltin(builtin)

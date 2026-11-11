@@ -4,7 +4,6 @@ import xbmc
 import sys
 import base64
 import urllib
-from source import api_request
 
 my_addon = xbmcaddon.Addon()
 
@@ -59,7 +58,7 @@ if __name__ == '__main__':
 
         if command == 'autoselect':
             target_page = sys.argv[ 2 ]
-            target_label = base64.decodestring(sys.argv[ 3 ])
+            target_label = base64.b64decode(sys.argv[ 3 ]).decode('utf-8')
 
             for i in range(20):
                 xbmc.sleep(200)

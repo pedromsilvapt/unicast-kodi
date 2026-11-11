@@ -12,13 +12,13 @@ def log (str, level = xbmc.LOGDEBUG ):
 class UnicastMonitor(xbmc.Monitor):
     def onNotification(self, sender, method, data):
         if method == 'Other.PluginVideoUnicast.AutoSelect':
-            data = json.loads(data.decode('utf-8'))
+            data = json.loads(data)
 
-            builtin = 'RunScript(%s,%s,%s,%s)' % ('plugin.video.unicast', "autoselect", data['page'], base64.encodestring(data['selectedItem'].encode('utf-8')))
+            builtin = 'RunScript(%s,%s,%s,%s)' % ('plugin.video.unicast', "autoselect", data['page'], base64.b64encode(data['selectedItem'].encode('utf-8')).decode('ascii'))
 
-            xbmc.executebuiltin(builtin.encode('utf-8'))
+            xbmc.executebuiltin(builtin)
         elif method == 'Other.PluginVideoUnicast.SetServerAddress':
-            data = json.loads(data.decode('utf-8'))
+            data = json.loads(data)
 
             xbmcaddon.Addon('plugin.video.unicast').setSettingString('address', data['address'])
             xbmcaddon.Addon('plugin.video.unicast').setSettingInt('port', data['port'])
