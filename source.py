@@ -43,6 +43,22 @@ def try_get(obj, *properties):
 def without_none(d):
     return {k: v for k, v in d.items() if v is not None}
 
+def sized_poster(url):
+    return None if url is None else url + '?width=' + str(poster_size)
+
+# Builds the art dict for movies, shows and custom items. 'landscape' is
+# deliberately not set: Arctic Fuse treats it as titled art, while our
+# background is textless (it already reaches the skin through 'fanart').
+def create_main_art(artwork):
+    poster = sized_poster(artwork.get('poster'))
+
+    return without_none({
+        'poster': poster,
+        'thumb': poster,
+        'fanart': artwork.get('background'),
+        'banner': artwork.get('banner'),
+    })
+
 # link https://stackoverflow.com/questions/1630320/what-is-the-pythonic-way-to-detect-the-last-element-in-a-for-loop
 def lookahead(iterable):
     """Pass through all values from the given iterable, augmented by the
@@ -199,13 +215,7 @@ def index():
 def create_tvshow_item(show):
     item = ListItem(show['title'])
 
-    item.setArt({
-        'banner': show['cachedArtwork']['banner'],
-        'background': show['cachedArtwork']['background'],
-        'landscape': show['cachedArtwork']['background'],
-        'poster': show['cachedArtwork']['poster'] + '?width=' + str(poster_size),
-        'fanart': show['cachedArtwork']['background']
-    })
+    item.setArt(create_main_art(show['cachedArtwork']))
     item.setInfo('video', {
         'DBID': 'show-' + show['id'],
         'year': show['year'],
@@ -307,14 +317,22 @@ def list_tvshows_recent():
 def create_tvseason_item(season, show = None):
     item = ListItem("Season %d" % season['number'])
 
-    item.setInfo('video', {
-        'DBID': 'season-' + season['id']
-    })
+    show_art = show['cachedArtwork'] if show is not None else (season['cachedArtwork'].get('tvshow') or {})
 
-    item.setArt({
-        'poster': season['cachedArtwork']['poster'] + '?width=' + str(poster_size),
-        'fanart': show['cachedArtwork']['background'] if show is not None else season['cachedArtwork']['tvshow']['background']
-    })
+    item.setInfo('video', without_none({
+        'DBID': 'season-' + season['id'],
+        'season': season['number'],
+        'tvshowtitle': show['title'] if show is not None else None,
+        'mediatype': 'season'
+    }))
+
+    item.setArt(without_none({
+        'poster': sized_poster(season['cachedArtwork'].get('poster')),
+        'fanart': show_art.get('background'),
+        'tvshow.poster': sized_poster(show_art.get('poster')),
+        'tvshow.fanart': show_art.get('background'),
+        'tvshow.banner': show_art.get('banner')
+    }))
 
     return item
 
@@ -333,7 +351,7 @@ def render_tvseasons(seasons):
 
         addDirectoryItem(plugin.handle, url, item, True)
 
-    setContent(plugin.handle, 'videos')
+    setContent(plugin.handle, 'seasons')
     endOfDirectory(plugin.handle)
 
 
@@ -347,17 +365,24 @@ def list_tvshows_seasons(show_id):
 def create_tvepisode_item(episode, season = None, show = None):
     item = ListItem(episode['title'])
 
-    item.setArt({
-        'thumb': episode['cachedArtwork']['thumbnail'],
-        'poster': episode['cachedArtwork']['thumbnail'],
-        'fanart': show['cachedArtwork']['background'] if show is not None else episode['cachedArtwork']['tvshow']['background']
-    })
+    show_art = show['cachedArtwork'] if show is not None else (episode['cachedArtwork'].get('tvshow') or {})
+
+    # No 'poster' here: Arctic Fuse only uses the episode still for landscape
+    # tiles when thumb != poster, and falls back to season/tvshow posters.
+    item.setArt(without_none({
+        'thumb': episode['cachedArtwork'].get('thumbnail'),
+        'fanart': show_art.get('background'),
+        'season.poster': sized_poster(season['cachedArtwork'].get('poster')) if season is not None else None,
+        'tvshow.poster': sized_poster(show_art.get('poster')),
+        'tvshow.fanart': show_art.get('background'),
+        'tvshow.banner': show_art.get('banner')
+    }))
 
     item.setInfo('video', {
         'DBID': 'episode-' + episode['id'],
         'premiered': (episode['airedAt'] or '').split('T')[0],
         'title': episode['title'],
-        'tvshowtitle': show['title'] if show is not None else 'Test',
+        'tvshowtitle': show['title'] if show is not None else '',
         'episode': episode['number'],
         'season': episode['seasonNumber'],
         'plot': episode['plot'],
@@ -405,13 +430,7 @@ def list_tvseasons_episodes(season_id):
 def create_movie_item(movie):
     item = ListItem(movie['title'])
 
-    item.setArt({
-        'banner': movie['cachedArtwork']['banner'],
-        'background': movie['cachedArtwork']['background'],
-        'landscape': movie['cachedArtwork']['background'],
-        'poster': movie['cachedArtwork']['poster'] + '?width=' + str(poster_size),
-        'fanart': movie['cachedArtwork']['background']
-    })
+    item.setArt(create_main_art(movie['cachedArtwork']))
 
     item.setInfo('video', {
         'DBID': 'movie-' + movie['id'],
@@ -669,15 +688,7 @@ def list_custom_filter_named(filter_name):
 def create_custom_item(custom):
     item = ListItem(custom['title'])
 
-    poster = None if custom['cachedArtwork']['poster'] == None else custom['cachedArtwork']['poster'] + '?width=' + str(poster_size)
-
-    item.setArt({
-        'banner': custom['cachedArtwork']['banner'],
-        'background': custom['cachedArtwork']['background'],
-        'landscape': custom['cachedArtwork']['background'],
-        'poster':  poster,
-        'fanart': custom['cachedArtwork']['background']
-    })
+    item.setArt(create_main_art(custom['cachedArtwork']))
 
     item.setInfo('video', {
         'plot': custom['plot'] if 'plot' in custom else '',
