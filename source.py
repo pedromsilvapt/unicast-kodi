@@ -66,17 +66,23 @@ def merge (*ds):
         bd.update(d)
     return bd
 
-def get_server_url ():
-    address = my_addon.getSetting( 'address' )
-    port = my_addon.getSetting( 'port' )
-
-    return 'http://%s:%s/api' % ( address, port )
-
 def get_server_media_url ():
-    address = my_addon.getSetting( 'address' )
-    port = my_addon.getSetting( 'port' )
+    url = my_addon.getSetting( 'url' ).strip() or 'http://127.0.0.1:3030'
 
-    return 'http://%s:%s' % ( address, port )
+    # Allow bare "host:port" values by assuming plain HTTP
+    if '://' not in url:
+        url = 'http://' + url
+
+    url = url.rstrip( '/' )
+
+    # Tolerate users pasting the API endpoint itself
+    if url.endswith( '/api' ):
+        url = url[:-len( '/api' )]
+
+    return url
+
+def get_server_url ():
+    return get_server_media_url() + '/api'
 
 def build_collection_filters ( collection_settings, all_collections, value ):
     ids_dict = dict( [ ( c['title'], c['id'] ) for c in all_collections ] )

@@ -34,11 +34,23 @@ def get_control_id ( content ):
         return 52
 
 
-def get_server_url ():
-    address = my_addon.getSetting( 'address' )
-    port = my_addon.getSetting( 'port' )
+def get_server_media_url ():
+    url = my_addon.getSetting( 'url' ).strip() or 'http://127.0.0.1:3030'
 
-    return 'http://%s:%s/api' % ( address, port )
+    # Allow bare "host:port" values by assuming plain HTTP
+    if '://' not in url:
+        url = 'http://' + url
+
+    url = url.rstrip( '/' )
+
+    # Tolerate users pasting the API endpoint itself
+    if url.endswith( '/api' ):
+        url = url[:-len( '/api' )]
+
+    return url
+
+def get_server_url ():
+    return get_server_media_url() + '/api'
 
 def api_request(url, params = {}):
     import json

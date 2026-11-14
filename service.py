@@ -20,8 +20,13 @@ class UnicastMonitor(xbmc.Monitor):
         elif method == 'Other.PluginVideoUnicast.SetServerAddress':
             data = json.loads(data)
 
-            xbmcaddon.Addon('plugin.video.unicast').setSettingString('address', data['address'])
-            xbmcaddon.Addon('plugin.video.unicast').setSettingInt('port', data['port'])
+            if 'url' in data:
+                url = data['url']
+            else:
+                # Legacy payload: separate address and port
+                url = 'http://%s:%s' % (data['address'], data['port'])
+
+            xbmcaddon.Addon('plugin.video.unicast').setSettingString('url', url)
 
 wait_for_abort_timeout = 10
 ping_play_timeout = 30
