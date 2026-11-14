@@ -26,7 +26,6 @@ provider-name="Pedro M. Silva">
     <screenshot>resources/screenshot00002.png</screenshot>
     <screenshot>resources/screenshot00003.png</screenshot>
     <screenshot>resources/screenshot00004.png</screenshot>
-    <screenshot>resources/screenshot00005.png</screenshot>
   </assets>
   <news>Updated with latest artwork metadata</news>
 </extension>
