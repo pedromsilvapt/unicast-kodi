@@ -18,6 +18,7 @@ provider-name="Pedro M. Silva">
 <extension point="xbmc.addon.metadata">
   <summary lang="en">Unicast Media Source</summary>
   <description lang="en_GB">Sources media from a Unicast media server.</description>
+  <license>MIT</license>
   <assets>
     <icon>icon.png</icon>
     <fanart>fanart.jpg</fanart>
