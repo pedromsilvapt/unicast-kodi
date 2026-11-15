@@ -217,7 +217,6 @@ def create_tvshow_item(show):
 
     item.setArt(create_main_art(show['cachedArtwork']))
     item.setInfo('video', {
-        'DBID': 'show-' + show['id'],
         'year': show['year'],
         'plot': show['plot'],
         'mediatype': 'tvshow'
@@ -320,7 +319,6 @@ def create_tvseason_item(season, show = None):
     show_art = show['cachedArtwork'] if show is not None else (season['cachedArtwork'].get('tvshow') or {})
 
     item.setInfo('video', without_none({
-        'DBID': 'season-' + season['id'],
         'season': season['number'],
         'tvshowtitle': show['title'] if show is not None else None,
         'mediatype': 'season'
@@ -379,7 +377,6 @@ def create_tvepisode_item(episode, season = None, show = None):
     }))
 
     item.setInfo('video', {
-        'DBID': 'episode-' + episode['id'],
         'premiered': (episode['airedAt'] or '').split('T')[0],
         'title': episode['title'],
         'tvshowtitle': show['title'] if show is not None else '',
@@ -433,7 +430,6 @@ def create_movie_item(movie):
     item.setArt(create_main_art(movie['cachedArtwork']))
 
     item.setInfo('video', {
-        'DBID': 'movie-' + movie['id'],
         'year': movie['year'],
         'plot': movie['plot'],
         'genre': movie['genres'],
