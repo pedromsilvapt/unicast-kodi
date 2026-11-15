@@ -58,6 +58,27 @@ def set_video_info(item, *setters):
 
     return tag
 
+# Unique IDs let skins like Arctic Fuse 3 fetch extended info (cast,
+# recommendations) through TMDb Helper. Empty values are dropped.
+def set_unique_ids(item, ids, default='tmdb'):
+    ids = {k: str(v) for k, v in ids.items() if v}
+
+    if ids:
+        item.getVideoInfoTag().setUniqueIDs(ids, default if default in ids else '')
+
+def external_ids(record, *keys):
+    external = record.get('external') or {}
+
+    ids = {k: external.get(k) for k in keys}
+
+    if 'imdb' in ids and not str(ids['imdb'] or '').startswith('tt'):
+        ids['imdb'] = None
+
+    return ids
+
+def show_tmdb_id(show):
+    return (show.get('external') or {}).get('tmdb') if show is not None else None
+
 def sized_poster(url):
     return None if url is None else url + '?width=' + str(poster_size)
 
@@ -243,10 +264,12 @@ def create_tvshow_item(show):
 
     item.setArt(create_main_art(show['cachedArtwork']))
     set_video_info(item,
+        ('setTitle', show['title']),
         ('setYear', maybe(int, show['year'])),
         ('setPlot', show['plot']),
         ('setMediaType', 'tvshow'),
     )
+    set_unique_ids(item, external_ids(show, 'tmdb', 'imdb', 'tvdb'))
     item.setProperties({
         'TotalSeasons': show['seasonsCount'],
         'TotalEpisodes': show['episodesCount'],
@@ -351,10 +374,12 @@ def create_tvseason_item(season, show = None):
     show_art = show['cachedArtwork'] if show is not None else (season['cachedArtwork'].get('tvshow') or {})
 
     set_video_info(item,
+        ('setTitle', "Season %d" % season['number']),
         ('setSeason', int(season['number'])),
         ('setTvShowTitle', show['title'] if show is not None else None),
         ('setMediaType', 'season'),
     )
+    set_unique_ids(item, merge(external_ids(season, 'imdb', 'tvdb'), {'tvshow.tmdb': show_tmdb_id(show)}))
 
     item.setArt(without_none({
         'poster': sized_poster(season['cachedArtwork'].get('poster')),
@@ -420,6 +445,7 @@ def create_tvepisode_item(episode, season = None, show = None):
         ('setRating', maybe(float, episode['rating'])),
         ('setMediaType', 'episode'),
     )
+    set_unique_ids(item, merge(external_ids(episode, 'imdb', 'tvdb'), {'tvshow.tmdb': show_tmdb_id(show)}))
 
     item.setProperties(without_none({
         'VideoCodec': try_get(episode, 'metadata', 'video', 'codec'),
@@ -462,6 +488,7 @@ def create_movie_item(movie):
     item.setArt(create_main_art(movie['cachedArtwork']))
 
     set_video_info(item,
+        ('setTitle', movie['title']),
         ('setYear', maybe(int, movie['year'])),
         ('setPlot', movie['plot']),
         ('setGenres', maybe(list, movie['genres'])),
@@ -472,6 +499,7 @@ def create_movie_item(movie):
         ('setMpaa', movie['parentalRating']),
         ('setMediaType', 'movie'),
     )
+    set_unique_ids(item, external_ids(movie, 'tmdb', 'imdb', 'tvdb'))
 
     item.setProperties(without_none({
         'VideoCodec': try_get(movie, 'metadata', 'video', 'codec'),
@@ -725,10 +753,12 @@ def create_custom_item(custom):
     item.setArt(create_main_art(custom['cachedArtwork']))
 
     set_video_info(item,
+        ('setTitle', custom['title']),
         ('setPlot', custom.get('plot')),
         ('setPlaycount', 1 if custom['watched'] else 0),
         ('setMediaType', 'video'),
     )
+    set_unique_ids(item, external_ids(custom, 'tmdb', 'imdb', 'tvdb'))
 
     item.setProperties(without_none({
         'VideoCodec': try_get(custom, 'metadata', 'video', 'codec'),
