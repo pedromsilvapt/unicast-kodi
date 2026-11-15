@@ -13,6 +13,7 @@ start = time.time()
 import sys
 import json
 import urllib
+import urllib.parse
 import urllib.request
 import routing
 import random
@@ -21,7 +22,7 @@ import xbmc
 import xbmcvfs
 import base64
 from datetime import datetime
-from xbmcgui import ListItem
+from xbmcgui import ListItem, Dialog, NOTIFICATION_WARNING
 from xbmcplugin import addDirectoryItem, addDirectoryItems, endOfDirectory, setContent, setPluginCategory, setPluginFanart, setResolvedUrl
 import xml.etree.ElementTree as ET
 import os
@@ -111,14 +112,25 @@ def build_collection_filters ( collection_settings, all_collections, value ):
 
     return dict( params )
 
+def path_arg(value):
+    # The routing module neither escapes nor unescapes path arguments
+    return urllib.parse.quote(value, safe='')
+
+def find_collection(kind, title):
+    collections = api_request('media/collection/', { 'kind': kind })
+
+    return next((c for c in collections if c['title'] == title), None)
+
+def collection_not_found(title):
+    xbmc.log('Unicast: category "%s" not found' % title, level=xbmc.LOGWARNING)
+    Dialog().notification('Unicast', 'Category "%s" not found' % title, NOTIFICATION_WARNING)
+    endOfDirectory(plugin.handle, succeeded=False)
+
 def api_post(url,body={}):
     url = "%s/%s" % (get_server_url(), url)
 
-    if body is dict:
-        body = list(body.items())
-
     if body:
-        url = '%s?%s' % (url, '&'.join(['%s=%s' % p for p in body ]))
+        url = '%s?%s' % (url, urllib.parse.urlencode(body))
 
     with urllib.request.urlopen(url, urllib.parse.urlencode({}).encode('utf-8')) as resp:
         content = resp.read()
@@ -150,7 +162,7 @@ def api_request(url, params = {}, filter_collections = None):
         del params[ 'filterCollections' ]
 
     if params:
-        url = '%s?%s' % ( url, '&'.join( [ '%s=%s' % p for p in params.items() ] ) )
+        url = '%s?%s' % ( url, urllib.parse.urlencode( params ) )
 
     with urllib.request.urlopen( url ) as resp:
         content = resp.read()
@@ -268,12 +280,13 @@ def list_tvshows_genres():
     genres = api_request('media/show/genres')
 
     for genre in genres:
-        addDirectoryItem(plugin.handle, plugin.url_for(list_tvshows_genres_items, genre), ListItem(genre), True)
+        addDirectoryItem(plugin.handle, plugin.url_for(list_tvshows_genres_items, path_arg(genre)), ListItem(genre), True)
 
     endOfDirectory(plugin.handle)
 
 @plugin.route('/tvshows/genres/<genre_id>')
 def list_tvshows_genres_items(genre_id):
+    genre_id = urllib.parse.unquote(genre_id)
     shows = api_request('media/show', [ ('filterGenres[%s]' % genre_id, 'include') ], filter_collections = 'show' )
 
     render_tvshows(shows)
@@ -283,12 +296,17 @@ def list_tvshows_collections():
     collections = api_request('media/collection/', { 'kind': 'show' } )
 
     for collection in collections:
-        addDirectoryItem(plugin.handle, plugin.url_for(list_tvshows_collections_items, collection['title']), ListItem(collection['title']), True)
+        addDirectoryItem(plugin.handle, plugin.url_for(list_tvshows_collections_items, path_arg(collection['title'])), ListItem(collection['title']), True)
 
     endOfDirectory(plugin.handle)
 
 @plugin.route('/tvshows/collections/<collection_title>')
 def list_tvshows_collections_items(collection_title):
+    collection_title = urllib.parse.unquote(collection_title)
+
+    if find_collection('show', collection_title) is None:
+        return collection_not_found(collection_title)
+
     shows = api_request('media/show', { 'filterCollections': { collection_title: 'include' } }, filter_collections = 'show' )
 
     render_tvshows(shows)
@@ -487,12 +505,13 @@ def list_movies_genres():
     genres = api_request('media/movie/genres')
 
     for genre in genres:
-        addDirectoryItem(plugin.handle, plugin.url_for(list_movies_genres_items, genre), ListItem(genre), True)
+        addDirectoryItem(plugin.handle, plugin.url_for(list_movies_genres_items, path_arg(genre)), ListItem(genre), True)
 
     endOfDirectory(plugin.handle)
 
 @plugin.route('/movies/genres/<genre_id>')
 def list_movies_genres_items(genre_id):
+    genre_id = urllib.parse.unquote(genre_id)
     movies = api_request('media/movie', [ ( 'filterGenres[%s]' % genre_id, 'include' ) ], filter_collections = 'movie' )
 
     render_movies(movies)
@@ -502,13 +521,18 @@ def list_movies_collections():
     collections = api_request('media/collection/', { 'kind': 'movie' } )
 
     for collection in collections:
-        addDirectoryItem(plugin.handle, plugin.url_for(list_movies_collections_items, collection['id']), ListItem(collection['title']), True)
+        addDirectoryItem(plugin.handle, plugin.url_for(list_movies_collections_items, path_arg(collection['title'])), ListItem(collection['title']), True)
 
     endOfDirectory(plugin.handle)
 
-@plugin.route('/movies/collections/<collection_id>')
-def list_movies_collections_items(collection_id):
-    movies = api_request('media/movie', [ ( 'filterCollections[%s]' % collection_id, 'include' ) ], filter_collections = 'movie')
+@plugin.route('/movies/collections/<collection_title>')
+def list_movies_collections_items(collection_title):
+    collection_title = urllib.parse.unquote(collection_title)
+
+    if find_collection('movie', collection_title) is None:
+        return collection_not_found(collection_title)
+
+    movies = api_request('media/movie', { 'filterCollections': { collection_title: 'include' } }, filter_collections = 'movie')
 
     render_movies(movies)
 
