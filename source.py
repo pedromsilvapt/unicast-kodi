@@ -44,6 +44,20 @@ def try_get(obj, *properties):
 def without_none(d):
     return {k: v for k, v in d.items() if v is not None}
 
+def maybe(fn, value):
+    return None if value is None else fn(value)
+
+# Applies (setter name, value) pairs to the item's InfoTagVideo, skipping None
+# values: unlike the deprecated setInfo, the setters raise on None.
+def set_video_info(item, *setters):
+    tag = item.getVideoInfoTag()
+
+    for setter, value in setters:
+        if value is not None:
+            getattr(tag, setter)(value)
+
+    return tag
+
 def sized_poster(url):
     return None if url is None else url + '?width=' + str(poster_size)
 
@@ -228,11 +242,11 @@ def create_tvshow_item(show):
     item = ListItem(show['title'])
 
     item.setArt(create_main_art(show['cachedArtwork']))
-    item.setInfo('video', {
-        'year': show['year'],
-        'plot': show['plot'],
-        'mediatype': 'tvshow'
-    })
+    set_video_info(item,
+        ('setYear', maybe(int, show['year'])),
+        ('setPlot', show['plot']),
+        ('setMediaType', 'tvshow'),
+    )
     item.setProperties({
         'TotalSeasons': show['seasonsCount'],
         'TotalEpisodes': show['episodesCount'],
@@ -336,11 +350,11 @@ def create_tvseason_item(season, show = None):
 
     show_art = show['cachedArtwork'] if show is not None else (season['cachedArtwork'].get('tvshow') or {})
 
-    item.setInfo('video', without_none({
-        'season': season['number'],
-        'tvshowtitle': show['title'] if show is not None else None,
-        'mediatype': 'season'
-    }))
+    set_video_info(item,
+        ('setSeason', int(season['number'])),
+        ('setTvShowTitle', show['title'] if show is not None else None),
+        ('setMediaType', 'season'),
+    )
 
     item.setArt(without_none({
         'poster': sized_poster(season['cachedArtwork'].get('poster')),
@@ -394,18 +408,18 @@ def create_tvepisode_item(episode, season = None, show = None):
         'tvshow.banner': show_art.get('banner')
     }))
 
-    item.setInfo('video', {
-        'premiered': (episode['airedAt'] or '').split('T')[0],
-        'title': episode['title'],
-        'tvshowtitle': show['title'] if show is not None else '',
-        'episode': episode['number'],
-        'season': episode['seasonNumber'],
-        'plot': episode['plot'],
-        'playcount': 1 if episode['watched'] else 0,
-        'duration': episode['runtime'],
-        'rating': episode['rating'],
-        'mediatype': 'episode'
-    })
+    set_video_info(item,
+        ('setPremiered', episode['airedAt'].split('T')[0] if episode['airedAt'] else None),
+        ('setTitle', episode['title']),
+        ('setTvShowTitle', show['title'] if show is not None else None),
+        ('setEpisode', maybe(int, episode['number'])),
+        ('setSeason', maybe(int, episode['seasonNumber'])),
+        ('setPlot', episode['plot']),
+        ('setPlaycount', 1 if episode['watched'] else 0),
+        ('setDuration', maybe(int, episode['runtime'])),
+        ('setRating', maybe(float, episode['rating'])),
+        ('setMediaType', 'episode'),
+    )
 
     item.setProperties(without_none({
         'VideoCodec': try_get(episode, 'metadata', 'video', 'codec'),
@@ -447,17 +461,17 @@ def create_movie_item(movie):
 
     item.setArt(create_main_art(movie['cachedArtwork']))
 
-    item.setInfo('video', {
-        'year': movie['year'],
-        'plot': movie['plot'],
-        'genre': movie['genres'],
-        'playcount': 1 if movie['watched'] else 0,
-        'duration': movie['runtime'],
-        'tagline': movie['tagline'],
-        'rating': movie['rating'],
-        'mpaa': movie['parentalRating'],
-        'mediatype': 'movie'
-    })
+    set_video_info(item,
+        ('setYear', maybe(int, movie['year'])),
+        ('setPlot', movie['plot']),
+        ('setGenres', maybe(list, movie['genres'])),
+        ('setPlaycount', 1 if movie['watched'] else 0),
+        ('setDuration', maybe(int, movie['runtime'])),
+        ('setTagLine', movie['tagline']),
+        ('setRating', maybe(float, movie['rating'])),
+        ('setMpaa', movie['parentalRating']),
+        ('setMediaType', 'movie'),
+    )
 
     item.setProperties(without_none({
         'VideoCodec': try_get(movie, 'metadata', 'video', 'codec'),
@@ -710,11 +724,11 @@ def create_custom_item(custom):
 
     item.setArt(create_main_art(custom['cachedArtwork']))
 
-    item.setInfo('video', {
-        'plot': custom['plot'] if 'plot' in custom else '',
-        'playcount': 1 if custom['watched'] else 0,
-        'mediatype': 'video'
-    })
+    set_video_info(item,
+        ('setPlot', custom.get('plot')),
+        ('setPlaycount', 1 if custom['watched'] else 0),
+        ('setMediaType', 'video'),
+    )
 
     item.setProperties(without_none({
         'VideoCodec': try_get(custom, 'metadata', 'video', 'codec'),
