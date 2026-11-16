@@ -22,7 +22,7 @@ import xbmc
 import xbmcvfs
 import base64
 from datetime import datetime
-from xbmcgui import ListItem, Dialog, NOTIFICATION_WARNING
+from xbmcgui import ListItem, Dialog, Window, NOTIFICATION_WARNING
 from xbmcplugin import addDirectoryItem, addDirectoryItems, endOfDirectory, setContent, setPluginCategory, setPluginFanart, setResolvedUrl
 import xml.etree.ElementTree as ET
 import os
@@ -616,13 +616,16 @@ def create_media_item(media):
     elif media['kind'] == 'custom':
         return create_custom_item(media)
 
-def render_media(media_list, tail_items = []):
+def render_media(media_list, tail_items = [], item_url = None):
     buffer = []
 
-    for media, has_more in lookahead(media_list):
+    for index, (media, has_more) in enumerate(lookahead(media_list)):
         item = create_media_item(media)
 
-        url = plugin.url_for(play_media, media['kind'], media['id'])
+        if item_url is not None:
+            url = item_url(media, index)
+        else:
+            url = plugin.url_for(play_media, media['kind'], media['id'])
 
         buffer.append((url, item, False))
 
@@ -709,8 +712,9 @@ def list_playlist_items(playlist_id):
 
     setPluginCategory(plugin.handle, playlist_title)
 
-    # Render the page items
-    render_media(playlist_items)
+    # Render the page items. Their URLs carry the playlist and position, so
+    # that playing one makes Kodi's video playlist mirror this playlist
+    render_media(playlist_items, item_url = lambda media, index: playlist_item_url(media, playlist_id, index))
 
 @plugin.route('/custom-filters')
 def list_custom_filters():
@@ -786,10 +790,15 @@ def create_stream_url(kind, id, stream, session = None):
 
         return get_server_media_url() + '/media/send/%s/%s/session/%s/stream/%s' % (rec_type, rec_name, session['id'], stream)
 
-def create_playable_session(record, receiver):
+def create_playable_session(record, receiver, playlist_id = None, playlist_position = None):
     kind, id = record['kind'], record['id']
 
-    resp = api_post('player/%s/command/create-play-session' % urllib.parse.quote(receiver), [('args[]', kind), ('args[]', id)])
+    args = [('args[]', kind), ('args[]', id)]
+
+    if playlist_id is not None and playlist_position is not None:
+        args += [('args[]', playlist_id), ('args[]', playlist_position)]
+
+    resp = api_post('player/%s/command/create-play-session' % urllib.parse.quote(receiver), args)
 
     return resp['streams'], resp['session']
 
@@ -822,12 +831,147 @@ def create_playable_item(record, video, subtitles, session = None):
     return play_item
 
 
+# PLAYLIST SYNC
+# When a session that belongs to a Unicast playlist starts, Kodi's video
+# playlist is made to mirror that playlist (same items, same position), unless
+# it already does. Every entry is a /play/<kind>/<id>?playlist=&position= URL.
+
+KODI_VIDEO_PLAYLIST = 1
+PENDING_SESSION_PROPERTY = 'Unicast.PendingSession'
+# Seconds a pending session stays valid, waiting for Kodi to call us again
+PENDING_SESSION_TIMEOUT = 30
+
+def playlist_item_url(media, playlist_id, position):
+    return '%s?playlist=%s&position=%d' % (plugin.url_for(play_media, media['kind'], media['id']), playlist_id, position)
+
+# Comparable form of a plugin URL, insensitive to query order and trailing slashes
+def url_key(url):
+    parts = urllib.parse.urlsplit(url)
+
+    return (parts.netloc, parts.path.rstrip('/'), frozenset(urllib.parse.parse_qsl(parts.query)))
+
+def jsonrpc(method, **params):
+    request = {'jsonrpc': '2.0', 'id': 1, 'method': method, 'params': params}
+
+    response = json.loads(xbmc.executeJSONRPC(json.dumps(request)))
+
+    if 'error' in response:
+        xbmc.log('Unicast: %s failed: %s' % (method, response['error']), level=xbmc.LOGWARNING)
+
+    return response.get('result')
+
+def create_playlist_entry(media):
+    return create_media_item(media) or ListItem(media.get('title'))
+
+# Remembers the session the server already created for the item we are about to
+# start from the playlist, so the next run reuses it instead of creating another
+def set_pending_session(session, playlist_id, position):
+    Window(10000).setProperty(PENDING_SESSION_PROPERTY, json.dumps({
+        'session': session['id'],
+        'kind': session['mediaKind'],
+        'id': str(session['mediaId']),
+        'playlist': str(playlist_id),
+        'position': position,
+        'time': time.time(),
+    }))
+
+def take_pending_session(kind, id, playlist_id, position):
+    home = Window(10000)
+
+    value = home.getProperty(PENDING_SESSION_PROPERTY)
+
+    if not value:
+        return None
+
+    home.clearProperty(PENDING_SESSION_PROPERTY)
+
+    pending = json.loads(value)
+
+    expected = {'kind': kind, 'id': str(id), 'playlist': str(playlist_id), 'position': position}
+
+    if any(pending.get(key) != expected[key] for key in expected):
+        return None
+
+    if time.time() - pending.get('time', 0) > PENDING_SESSION_TIMEOUT:
+        return None
+
+    return pending['session']
+
+# Returns True when the caller should go on and resolve the item, False when
+# playback was restarted from the rebuilt playlist (the caller must not resolve).
+def sync_playlist(receiver, playlist_id, position, session = None):
+    try:
+        items = api_request('player/%s/playlists/%s/items/' % (urllib.parse.quote(receiver), playlist_id))
+    except Exception as err:
+        xbmc.log('Unicast: could not load playlist %s: %s' % (playlist_id, err), level=xbmc.LOGWARNING)
+        return True
+
+    if position < 0 or position >= len(items):
+        xbmc.log('Unicast: position %d is outside playlist %s (%d items)' % (position, playlist_id, len(items)), level=xbmc.LOGWARNING)
+        return True
+
+    target = [playlist_item_url(media, playlist_id, index) for index, media in enumerate(items)]
+    target_keys = [url_key(url) for url in target]
+
+    playlist = xbmc.PlayList(xbmc.PLAYLIST_VIDEO)
+
+    current_keys = [url_key(playlist[index].getPath()) for index in range(playlist.size())]
+    current_position = playlist.getposition()
+
+    if current_keys == target_keys and current_position == position:
+        xbmc.log('Unicast: playlist %s already in sync' % playlist_id, level=xbmc.LOGDEBUG)
+        return True
+
+    own_key = url_key(sys.argv[0] + sys.argv[2])
+
+    if 0 <= current_position < len(current_keys) and current_keys[current_position] == own_key:
+        # Kodi is playing us through its playlist player: rebuild the list
+        # around the playing entry. Unlike PlayList.add, the JSON-RPC calls
+        # shift Kodi's current index, so they are used for everything that
+        # sits before the playing entry.
+        xbmc.log('Unicast: syncing playlist %s around position %d' % (playlist_id, position), level=xbmc.LOGINFO)
+
+        for index in reversed(range(len(current_keys))):
+            if index != current_position:
+                jsonrpc('Playlist.Remove', playlistid=KODI_VIDEO_PLAYLIST, position=index)
+
+        for index in range(position):
+            jsonrpc('Playlist.Insert', playlistid=KODI_VIDEO_PLAYLIST, position=index, item={'file': target[index]})
+
+        for index in range(position + 1, len(items)):
+            playlist.add(target[index], create_playlist_entry(items[index]))
+
+        return True
+
+    # Kodi is playing us as a single file (Player.Open from the server). It
+    # clears the playlist again after a successful resolve, so instead we
+    # cancel this run and start playback from the rebuilt playlist.
+    xbmc.log('Unicast: rebuilding playlist %s, starting at position %d' % (playlist_id, position), level=xbmc.LOGINFO)
+
+    playlist.clear()
+
+    for index, media in enumerate(items):
+        playlist.add(target[index], create_playlist_entry(media))
+
+    if session is not None:
+        set_pending_session(session, playlist_id, position)
+
+    setResolvedUrl(plugin.handle, False, ListItem())
+
+    jsonrpc('Player.Open', item={'playlistid': KODI_VIDEO_PLAYLIST, 'position': position})
+
+    return False
+
 @plugin.route('/play-session/<id>')
 def play_session(id):
     receiver = my_addon.getSetting( 'receiver' ) or None
 
     if receiver is not None:
         streams, session = get_playable_session(id, receiver)
+
+        if session.get('playlistId') is not None and session.get('playlistPosition') is not None:
+            if not sync_playlist(receiver, session['playlistId'], int(session['playlistPosition']), session = session):
+                return
 
         mediaKind = session['mediaKind']
         mediaId = session['mediaId']
@@ -848,10 +992,28 @@ def play_session(id):
 def play_media(kind, id):
     receiver = my_addon.getSetting( 'receiver' ) or None
 
+    playlist_id = plugin.args.get('playlist', [None])[0]
+    playlist_position = maybe(int, plugin.args.get('position', [None])[0])
+
+    if receiver is None or playlist_position is None:
+        playlist_id = None
+
+    pending_session = None
+
+    if playlist_id is not None:
+        # Done before creating a session: a run that restarts playback from
+        # the playlist must not leave a session behind
+        if not sync_playlist(receiver, playlist_id, playlist_position):
+            return
+
+        pending_session = take_pending_session(kind, id, playlist_id, playlist_position)
+
     record = api_request('media/%s/%s' % (kind, id), params = {'transient': 'all'})
 
-    if receiver is not None:
-        streams, session = create_playable_session(record, receiver)
+    if pending_session is not None:
+        streams, session = get_playable_session(pending_session, receiver)
+    elif receiver is not None:
+        streams, session = create_playable_session(record, receiver, playlist_id, playlist_position)
     else:
         streams = api_request('media/%s/%s/streams' % (kind, id))
         session = None
